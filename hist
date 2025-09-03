@@ -1,0 +1,69 @@
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+
+img = cv2.imread("image.jpg", cv2.IMREAD_GRAYSCALE)
+img = cv2.resize(img, (256, 256))
+
+hist = [0] * 256
+for row in img:
+    for pixel in row:
+        hist[pixel] += 1
+
+num_pixels = img.shape[0] * img.shape[1]
+
+pdf = [h / num_pixels for h in hist]
+
+cdf = []
+cumulative = 0
+for p in pdf:
+    cumulative += p
+    cdf.append(cumulative)
+
+cdf_normalized = [round(c * 255) for c in cdf]
+
+equalized_img = np.zeros_like(img)
+rows, cols = img.shape
+for i in range(rows):
+    for j in range(cols):
+        old_val = img[i, j]
+        equalized_img[i, j] = cdf_normalized[old_val]
+
+hist_eq = [0] * 256
+for row in equalized_img:
+    for pixel in row:
+        hist_eq[pixel] += 1
+
+cv2.imwrite("equalized_image.jpg", equalized_img)
+
+
+plt.figure(figsize=(12, 8))
+
+# Original Image
+plt.subplot(2, 2, 1)
+plt.imshow(img, cmap="gray")
+plt.title("Original Image")
+plt.axis("off")
+
+# Original Histogram
+plt.subplot(2, 2, 2)
+plt.bar(range(256), hist, color="gray")
+plt.title("Original Histogram")
+plt.xlabel("Pixel Intensity")
+plt.ylabel("Frequency")
+
+# Equalized Image
+plt.subplot(2, 2, 3)
+plt.imshow(equalized_img, cmap="gray")
+plt.title("Equalized Image")
+plt.axis("off")
+
+# Equalized Histogram
+plt.subplot(2, 2, 4)
+plt.bar(range(256), hist_eq, color="gray")
+plt.title("Equalized Histogram")
+plt.xlabel("Pixel Intensity")
+plt.ylabel("Frequency")
+
+plt.tight_layout()
+plt.show()
