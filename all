@@ -774,6 +774,69 @@ plt.axis("off")
 
 plt.show()
 
+#region split and merge
+import numpy as np
+
+def homogeneity_test(arr, threshold):
+    """Check if region is homogeneous based on threshold"""
+    min_val = np.min(arr)
+    max_val = np.max(arr)
+    if max_val - min_val <= threshold:
+        return True
+    return False
+
+def split_and_merge(img, threshold):
+    """Recursive split and merge segmentation"""
+    size = img.shape[0]
+
+    # Base case: if homogeneous or 1x1 block → merge
+    if homogeneity_test(img, threshold) or size == 1:
+        mean_val = np.mean(img, dtype=int)
+        return np.full_like(img, mean_val)
+
+    # Ensure even split
+    mid = size // 2
+
+    # Pad odd-sized regions so splitting works
+    if size % 2 != 0:
+        img = np.pad(img, ((0, 1), (0, 1)), mode='edge')
+        size = img.shape[0]
+        mid = size // 2
+
+    # Split into quadrants
+    top_left = split_and_merge(img[0:mid, 0:mid], threshold)
+    top_right = split_and_merge(img[0:mid, mid:size], threshold)
+    bottom_left = split_and_merge(img[mid:size, 0:mid], threshold)
+    bottom_right = split_and_merge(img[mid:size, mid:size], threshold)
+
+    # Merge quadrants
+    top = np.hstack((top_left, top_right))
+    bottom = np.hstack((bottom_left, bottom_right))
+    merged = np.vstack((top, bottom))
+
+    # Crop back if padding was added
+    return merged[:img.shape[0], :img.shape[1]]
+
+image1 = np.array([[10, 9, 9, 4, 0],
+                  [0, 6, 6, 2, 2],
+                  [5, 9, 8, 4, 3],
+                  [7, 5, 5, 4, 3],
+                  [8, 10, 8, 5, 0]])
+
+image2 = np.array([[6, 5, 6, 6, 7, 7, 6, 6],
+                  [6, 7, 6, 7, 5, 5, 4, 7],
+                  [6, 6, 4, 4, 3, 2, 5, 6],
+                  [5, 4, 5, 4, 2, 3, 4, 6],
+                  [0, 3, 2, 3, 3, 2, 4, 7],
+                  [0, 0, 0, 0, 2, 2, 5, 6],
+                  [1, 1, 0, 1, 0, 3, 4, 4],
+                  [1, 0, 1, 0, 2, 3, 5, 4]])
+
+threshold = 3
+print("Original Image:\n", image2)
+
+result = split_and_merge(image2, threshold)
+print("\nSegmented Image (Split & Merge):\n", result)
 
 
 
