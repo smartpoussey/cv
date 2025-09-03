@@ -1,0 +1,707 @@
+#Histogram equivalization
+
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+
+img = cv2.imread("image.jpg", cv2.IMREAD_GRAYSCALE)
+
+img = cv2.resize(img, (256, 256))
+#h, w = cv_color.shape[:2]
+#new_size = (w // 2, h // 2)
+#cv_color_resized = cv2.resize(cv_color, new_size, interpolation=cv2.INTER_AREA)
+#cv_gray_resized = cv2.resize(cv_gray, new_size, interpolation=cv2.INTER_AREA)
+
+hist = np.zeros(256, dtype=int)
+for pixel_value in img.flatten():
+    hist[pixel_value] += 1
+
+num_pixels = img.size
+pdf = hist / num_pixels
+
+# Compute cumulative distribution (CDF)
+cdf = np.cumsum(pdf)
+
+# Normalize CDF to [0, 255]
+cdf_normalized = np.round(cdf * 255).astype(np.uint8)
+
+# Map old pixel values → new pixel values
+equalized_img = cdf_normalized[img]
+
+# Compute histogram of equalized image
+hist_eq = np.zeros(256, dtype=int)
+for pixel_value in equalized_img.flatten():
+    hist_eq[pixel_value] += 1
+
+
+plt.figure(figsize=(12, 8))
+
+# Original image
+plt.subplot(2, 2, 1)
+plt.imshow(img, cmap="gray")
+plt.title("Original Grayscale Image")
+plt.axis("off")
+
+# Histogram of original
+plt.subplot(2, 2, 2)
+plt.bar(range(256), hist, color='gray')
+plt.title("Original Histogram")
+plt.xlabel("Pixel Intensity")
+plt.ylabel("Frequency")
+
+# Equalized image
+plt.subplot(2, 2, 3)
+plt.imshow(equalized_img, cmap="gray")
+plt.title("Equalized Image")
+plt.axis("off")
+
+# Histogram of equalized image
+plt.subplot(2, 2, 4)
+plt.bar(range(256), hist_eq, color='gray')
+plt.title("Equalized Histogram")
+plt.xlabel("Pixel Intensity")
+plt.ylabel("Frequency")
+
+plt.tight_layout()
+plt.show()
+
+cv2.imwrite("equalized_image.jpg", equalized_img)
+
+
+# Canny Edge detection
+import cv2
+import numpy as np
+from matplotlib import pyplot as plt
+
+def covolution(image, operator):
+
+  img_h, img_w = image.shape
+  kernel_h, kernel_w = operator.shape
+
+  padded_image = np.zeros((img_h + 2, img_w + 2))
+  padded_image[1:-1, 1:-1] = image
+
+  output = np.zeros_like(image)
+
+  for i in range(0, img_h):
+      for j in range(0, img_w):
+          region = padded_image[i:i+kernel_h, j:j+kernel_w]
+          output[i, j] = np.sum(region * operator)
+
+  return output
+
+image = cv2.imread("green-snake.jpg", 0)
+#img = img.resize((128, 128))
+
+display(plt.imshow(image, cmap='gray', vmin=0, vmax=255))
+plt.axis('off')
+plt.show()
+
+
+
+print("Original Image:")
+print(image)
+
+# Sobel operator
+sobel_x = np.array([[-1, 0, 1],
+                    [-2, 0, 2],
+                    [-1, 0, 1]])
+
+sobel_y = np.array([[1, 2, 1],
+                    [0,  0,  0],
+                    [-1,  -2,  -1]])
+
+# Prewitt operator
+prewitt_x = np.array([[-1, 0, 1],
+                      [-1, 0, 1],
+                      [-1, 0, 1]])
+
+prewitt_y = np.array([[1, 1, 1],
+                      [0,  0,  0],
+                      [-1, -1, -1]])
+
+# Gaussian Blur
+gaussian_kernel = (1/16) * np.array([
+                            [1, 2, 1],
+                            [2, 4, 2],
+                            [1, 2, 1]
+                        ])
+
+filtered_image = covolution(image, gaussian_kernel)
+
+print("\nFiltered Image:")
+print(filtered_image)
+
+
+operator_x = sobel_x
+operator_y = sobel_y
+
+# gx
+G_x = covolution(filtered_image, operator_x)
+
+print("\nGx:")
+print(G_x)
+
+# gx
+G_y = covolution(filtered_image, operator_y)
+
+print("\nGy:")
+print(G_y)
+
+
+# Calculating Gradient Magnitude and Direction
+magnitude = np.sqrt(G_x**2 + G_y**2)
+magnitude = np.round(magnitude)
+print("\nMagnitude:")
+print(magnitude)
+
+direction = np.arctan2(G_y, G_x)
+#direction = (direction * 180.0 / np.pi) % 180
+direction = np.degrees(direction) % 180
+print("\nDirection :")
+print(direction)
+
+orientation =  np.round(direction / 45) * 45
+print("\nOrientation :")
+print(orientation)
+
+# Non Maximum Suppression
+temp_magnitude = magnitude
+
+for i in range(1, magnitude.shape[0]-1):
+  for j in range(1, magnitude.shape[1]-1):
+
+    if orientation[i, j] == 0 or orientation[i, j] == 180:
+        if magnitude[i-1, j] > magnitude[i, j] or magnitude[i+1, j] > magnitude[i, j]:
+            temp_magnitude[i, j] = 0
+
+    elif orientation[i, j] == 45:
+        if magnitude[i-1, j+1] > magnitude[i, j] or magnitude[i+1, j-1] > magnitude[i, j]:
+            temp_magnitude[i, j] = 0
+
+    elif orientation[i, j] == 135:
+        if magnitude[i-1, j-1] > magnitude[i, j] or magnitude[i+1, j+1] > magnitude[i, j]:
+            temp_magnitude[i, j] = 0
+
+    elif orientation[i, j] == 90:
+        if magnitude[i, j-1] > magnitude[i, j] or magnitude[i, j+1] > magnitude[i, j]:
+            temp_magnitude[i, j] = 0
+
+suppressed_image = temp_magnitude
+print("\nAfter non maximum suppression:")
+print(suppressed_image)
+
+
+# Double Thresholding
+
+low_threshold = 8
+high_threshold = 12
+
+edges = np.zeros_like(suppressed_image)
+
+strong = 255
+
+for i in range(suppressed_image.shape[0]):
+    for j in range(suppressed_image.shape[1]):
+
+        if suppressed_image[i, j] >= high_threshold:
+            edges[i, j] = strong
+        elif suppressed_image[i, j] <= low_threshold:
+            edges[i, j] = 0
+        else:
+            edges[i, j] = suppressed_image[i, j]
+
+print("\nAfter Double Thresholding:")
+print(edges)
+
+# Edge Tracking by Hysteresis
+final_edges = edges.copy()
+
+for i in range(1, edges.shape[0]-1):
+    for j in range(1, edges.shape[1]-1):
+        if edges[i, j] != strong:
+
+            if ((edges[i+1, j-1] == strong) or (edges[i+1, j] == strong) or (edges[i+1, j+1] == strong)
+                or (edges[i, j-1] == strong) or (edges[i, j+1] == strong)
+                or (edges[i-1, j-1] == strong) or (edges[i-1, j] == strong) or (edges[i-1, j+1] == strong)):
+                final_edges[i, j] = strong
+            else:
+                final_edges[i, j] = 0
+
+print("\nFinal Edges after Hysteresis:")
+print(final_edges)
+
+display(plt.imshow(final_edges, cmap='gray', vmin=0, vmax=255))
+plt.axis('off')
+plt.show()
+
+
+#Connected componeent lableing 
+import numpy as np
+
+img = np.array([[0, 0, 1, 0, 0, 1],
+       [1, 1, 1, 0, 1, 1],
+       [0, 1, 0, 0, 0, 0],
+       [0, 0, 0, 1, 1, 1],
+       [0, 0, 0, 1, 0, 1],
+       [1, 1, 0, 0, 0, 0]])
+
+result = np.zeros_like(img)
+
+if img[0][0] == 0:
+    label = 0
+else:
+    label = 1
+
+for i in range(1, len(img[0])):
+    if img[0][i] == 1:
+        if result[0][i - 1] != 0:
+            result[0][i] = result[0][i - 1]
+        else:
+            label += 1
+            result[0][i] = label
+
+d = {}
+
+for i in range(1, len(img)):
+    if img[i][0] == 1:
+        if result[i - 1][0] != 0:
+            result[i][0] = result[i - 1][0]
+        else:
+            label += 1
+            result[i][0] = label
+    for j in range(1, len(img[0])):
+        if img[i][j] == 1:
+            if result[i][j - 1] != 0 and result[i - 1][j] != 0:
+                min_val = min(result[i][j - 1], result[i - 1][j])
+                result[i][j] = min_val
+                d[max(result[i][j - 1], result[i - 1][j])] = min_val
+            elif result[i][j - 1] == 0 and result[i - 1][j] == 0:
+                label += 1
+                result[i][j] = label
+            else:
+                result[i][j] = max(result[i][j - 1], result[i - 1][j])
+
+print("First Parse")
+print(result)
+
+for i in range(len(img)):
+    for j in range(len(img[0])):
+        if result[i][j] in d:
+            result[i][j] = d[result[i][j]]
+
+print("Second Parse")
+print(result)
+
+#7. Thresholding - binary, otsu's thresholding, multiple thresholding
+
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+
+img = cv2.imread("beach.jpeg", cv2.IMREAD_GRAYSCALE)
+
+hist, bins = np.histogram(img.ravel(), 256, [0,256])
+total_pixels = img.shape[0] * img.shape[1]
+
+current_max, threshold = 0, 0
+sum_total, sum_foreground, weight_background = 0, 0, 0
+
+for i in range(256):
+    sum_total += i * hist[i]
+
+for t in range(256):
+    weight_background += hist[t]
+    if weight_background == 0:
+        continue
+    weight_foreground = total_pixels - weight_background
+    if weight_foreground == 0:
+        break
+
+    sum_foreground += t * hist[t]
+
+    mean_background = sum_foreground / weight_background
+    mean_foreground = (sum_total - sum_foreground) / weight_foreground
+
+    var_between = weight_background * weight_foreground * (mean_background - mean_foreground) ** 2
+
+    if var_between > current_max:
+        current_max = var_between
+        threshold = t
+
+print(f"Optimal threshold using Otsu's method = {threshold}")
+
+_, otsu_img = cv2.threshold(img, threshold, 255, cv2.THRESH_BINARY)
+
+plt.figure(figsize=(12,6))
+
+plt.subplot(1,3,1)
+plt.title("Original")
+plt.imshow(img, cmap="gray")
+plt.axis("off")
+
+plt.subplot(1,3,2)
+plt.title("Histogram")
+plt.plot(hist)
+plt.axvline(threshold, color='r', linestyle='--', label=f"T={threshold}")
+plt.legend()
+
+plt.subplot(1,3,3)
+plt.title("Otsu Thresholded")
+plt.imshow(otsu_img, cmap="gray")
+plt.axis("off")
+
+plt.show()
+
+#8. First order hold - zero order hold
+
+import cv2
+import numpy as np
+import matplotlib as plt
+
+# b.i Zero order hold (nearest neighbor by duplication)
+def zoom_zero_order(image, factor):
+    h, w, c = image.shape
+    zoomed = np.zeros((h * factor, w * factor, c), dtype=image.dtype)
+    for i in range(h):
+        for j in range(w):
+            zoomed[i*factor:(i+1)*factor, j*factor:(j+1)*factor] = image[i, j]
+    return zoomed
+
+# b.ii First order hold (simple linear interpolation)
+def zoom_first_order(image, factor):
+    h, w, c = image.shape
+    zoomed = np.zeros((h * factor, w * factor, c), dtype=np.uint8)
+    for i in range(h * factor):
+        for j in range(w * factor):
+            x = i / factor
+            y = j / factor
+            x0 = int(np.floor(x))
+            x1 = min(x0 + 1, h - 1)
+            y0 = int(np.floor(y))
+            y1 = min(y0 + 1, w - 1)
+
+            a = x - x0
+            b = y - y0
+
+            zoomed[i, j] = (
+                (1 - a) * (1 - b) * image[x0, y0] +
+                (a) * (1 - b) * image[x1, y0] +
+                (1 - a) * (b) * image[x0, y1] +
+                (a) * (b) * image[x1, y1]
+            )
+    return zoomed
+
+image = cv2.imread("beach.jpeg")  # replace with your image path
+zoomed_zero = zoom_zero_order(image, 2)
+zoomed_first = zoom_first_order(image, 2)
+
+cv2.imwrite("zoomed_zero.jpg", zoomed_zero)
+cv2.imwrite("zoomed_first.jpg", zoomed_first)
+
+
+#2. Transformation - Gray level modification
+
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+
+img = cv2.imread("beach.jpeg", cv2.IMREAD_GRAYSCALE)
+
+# Negative transformation
+negative_img = 255 - img
+
+# Logarithmic transformation
+c = 255 / np.log(1 + np.max(img))
+log_img = c * (np.log(1 + img.astype(np.float32)))
+log_img = np.uint8(log_img)
+
+# Power-law (gamma) transformation
+gamma = 0.5   # < 1 brightens, > 1 darkens
+gamma_img = np.array(255 * (img / 255) ** gamma, dtype='uint8')
+
+# Contrast stretching (linear normalization)
+min_val, max_val = np.min(img), np.max(img)
+contrast_stretch = (img - min_val) * (255 / (max_val - min_val))
+contrast_stretch = np.uint8(contrast_stretch)
+
+plt.figure(figsize=(15,8))
+
+plt.subplot(2,3,1)
+plt.title("Original")
+plt.imshow(img, cmap="gray")
+plt.axis("off")
+
+plt.subplot(2,3,2)
+plt.title("Negative")
+plt.imshow(negative_img, cmap="gray")
+plt.axis("off")
+
+plt.subplot(2,3,3)
+plt.title("Log Transformation")
+plt.imshow(log_img, cmap="gray")
+plt.axis("off")
+
+plt.subplot(2,3,4)
+plt.title(f"Gamma (γ={gamma})")
+plt.imshow(gamma_img, cmap="gray")
+plt.axis("off")
+
+plt.subplot(2,3,5)
+plt.title("Contrast Stretching")
+plt.imshow(contrast_stretch, cmap="gray")
+plt.axis("off")
+
+plt.show()
+
+#region split and merge
+import numpy as np
+
+def homogeneity_test(arr, threshold):
+    """Check if region is homogeneous based on threshold"""
+    min_val = np.min(arr)
+    max_val = np.max(arr)
+    if max_val - min_val <= threshold:
+        return True
+    return False
+
+def split_and_merge(img, threshold):
+    """Recursive split and merge segmentation"""
+    size = img.shape[0]
+
+    # Base case: if homogeneous or 1x1 block → merge
+    if homogeneity_test(img, threshold) or size == 1:
+        mean_val = np.mean(img, dtype=int)
+        return np.full_like(img, mean_val)
+
+    # Ensure even split
+    mid = size // 2
+
+    # Pad odd-sized regions so splitting works
+    if size % 2 != 0:
+        img = np.pad(img, ((0, 1), (0, 1)), mode='edge')
+        size = img.shape[0]
+        mid = size // 2
+
+    # Split into quadrants
+    top_left = split_and_merge(img[0:mid, 0:mid], threshold)
+    top_right = split_and_merge(img[0:mid, mid:size], threshold)
+    bottom_left = split_and_merge(img[mid:size, 0:mid], threshold)
+    bottom_right = split_and_merge(img[mid:size, mid:size], threshold)
+
+    # Merge quadrants
+    top = np.hstack((top_left, top_right))
+    bottom = np.hstack((bottom_left, bottom_right))
+    merged = np.vstack((top, bottom))
+
+    # Crop back if padding was added
+    return merged[:img.shape[0], :img.shape[1]]
+
+# ============================
+# Example Test Images
+# ============================
+image1 = np.array([[10, 9, 9, 4, 0],
+                  [0, 6, 6, 2, 2],
+                  [5, 9, 8, 4, 3],
+                  [7, 5, 5, 4, 3],
+                  [8, 10, 8, 5, 0]])
+
+image2 = np.array([[6, 5, 6, 6, 7, 7, 6, 6],
+                  [6, 7, 6, 7, 5, 5, 4, 7],
+                  [6, 6, 4, 4, 3, 2, 5, 6],
+                  [5, 4, 5, 4, 2, 3, 4, 6],
+                  [0, 3, 2, 3, 3, 2, 4, 7],
+                  [0, 0, 0, 0, 2, 2, 5, 6],
+                  [1, 1, 0, 1, 0, 3, 4, 4],
+                  [1, 0, 1, 0, 2, 3, 5, 4]])
+
+# ============================
+# Run Split and Merge
+# ============================
+threshold = 3
+print("Original Image:\n", image2)
+
+result = split_and_merge(image2, threshold)
+print("\nSegmented Image (Split & Merge):\n", result)
+
+
+#5. Arithmetic Logical operations
+
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+
+def multiply_images(img1, img2):
+
+    img1_norm = img1.astype(np.float32) / 255.0
+    img2_norm = img2.astype(np.float32) / 255.0
+
+    result_norm = img1_norm * img2_norm
+
+    result = (result_norm * 255.0).astype(img1.dtype)
+
+    return result
+
+def divide_images(img1, img2):
+
+    img1_norm = img1.astype(np.float32) / 255.0
+    img2_norm = img2 / 255.0
+
+    result_norm = img1_norm / img2_norm
+
+    result_norm = np.clip(result_norm, 0.0, 1.0)
+
+    result = (result_norm * 255.0).astype(img1.dtype)
+
+    return result
+
+
+img1 = cv2.imread("beach.jpeg", cv2.IMREAD_GRAYSCALE)
+img2 = cv2.imread("bird.jpeg", cv2.IMREAD_GRAYSCALE)
+
+if img1 is not None and img2 is not None:
+    if img1.shape != img2.shape:
+        print("Resizing img2 to match img1 shape.")
+        img2 = cv2.resize(img2, (img1.shape[1], img1.shape[0]))
+
+    multiplied_img = multiply_images(img1, img2)
+
+    divided_img = divide_images(img1, img2)
+
+    if multiplied_img is not None and divided_img is not None:
+        fig, axs = plt.subplots(1, 4, figsize=(20, 5))
+
+        axs[0].imshow(img1, cmap='gray')
+        axs[0].set_title("Image 1")
+        axs[0].axis('off')
+
+        axs[1].imshow(img2, cmap='gray')
+        axs[1].set_title("Image 2")
+        axs[1].axis('off')
+
+        axs[2].imshow(multiplied_img, cmap='gray')
+        axs[2].set_title("Multiplied Image")
+        axs[2].axis('off')
+
+        axs[3].imshow(divided_img, cmap='gray')
+        axs[3].set_title("Divided Image")
+        axs[3].axis('off')
+
+        plt.tight_layout()
+        plt.show()
+
+# AND & OR
+import cv2
+import numpy as np
+from matplotlib import pyplot as plt
+
+
+image = cv2.imread('beach.jpeg', cv2.IMREAD_GRAYSCALE)
+
+
+height, width = image.shape[:2]
+
+
+display(plt.imshow(image, cmap='gray', vmin=0, vmax=255))
+plt.axis('off')
+plt.show()
+
+
+# mask value
+mask_value =0b10000000
+
+
+for i in range(image.shape[0]):
+   for j in range(image.shape[1]):
+       image[i,j] = image[i,j] & mask_value
+
+
+display(plt.imshow(image, cmap='gray', vmin=0, vmax=255))
+plt.axis('off')
+plt.show()
+
+
+image = cv2.imread('beach.jpeg', cv2.IMREAD_GRAYSCALE)
+
+
+height, width = image.shape[:2]
+
+
+display(plt.imshow(image, cmap='gray', vmin=0, vmax=255))
+plt.axis('off')
+plt.show()
+
+
+for i in range(image.shape[0]):
+   for j in range(image.shape[1]):
+       image[i,j] = image[i,j] | mask_value
+
+
+display(plt.imshow(image, cmap='gray', vmin=0, vmax=255))
+plt.axis('off')
+plt.show()
+
+
+#7. Thresholding - binary, otsu's thresholding, multiple thresholding
+
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+
+img = cv2.imread("beach.jpeg", cv2.IMREAD_GRAYSCALE)
+
+hist, bins = np.histogram(img.ravel(), 256, [0,256])
+total_pixels = img.shape[0] * img.shape[1]
+
+current_max, threshold = 0, 0
+sum_total, sum_foreground, weight_background = 0, 0, 0
+
+for i in range(256):
+    sum_total += i * hist[i]
+
+for t in range(256):
+    weight_background += hist[t]
+    if weight_background == 0:
+        continue
+    weight_foreground = total_pixels - weight_background
+    if weight_foreground == 0:
+        break
+
+    sum_foreground += t * hist[t]
+
+    mean_background = sum_foreground / weight_background
+    mean_foreground = (sum_total - sum_foreground) / weight_foreground
+
+    var_between = weight_background * weight_foreground * (mean_background - mean_foreground) ** 2
+
+    if var_between > current_max:
+        current_max = var_between
+        threshold = t
+
+print(f"Optimal threshold using Otsu's method = {threshold}")
+
+_, otsu_img = cv2.threshold(img, threshold, 255, cv2.THRESH_BINARY)
+
+plt.figure(figsize=(12,6))
+
+plt.subplot(1,3,1)
+plt.title("Original")
+plt.imshow(img, cmap="gray")
+plt.axis("off")
+
+plt.subplot(1,3,2)
+plt.title("Histogram")
+plt.plot(hist)
+plt.axvline(threshold, color='r', linestyle='--', label=f"T={threshold}")
+plt.legend()
+
+plt.subplot(1,3,3)
+plt.title("Otsu Thresholded")
+plt.imshow(otsu_img, cmap="gray")
+plt.axis("off")
+
+plt.show()
+
+
+
+
