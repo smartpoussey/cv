@@ -1,0 +1,599 @@
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+
+img = cv2.imread("tree.jpg", cv2.IMREAD_GRAYSCALE)
+img = cv2.resize(img, (256, 256))
+img = img.astype(np.uint8)
+
+noises = {}
+
+# 1. Gaussian noise
+gaussian = img + np.random.normal(0, 50, img.shape)   # std=50
+gaussian = np.clip(gaussian, 0, 255).astype(np.uint8)
+noises["Gaussian"] = gaussian
+
+# 2. Impulse (Salt & Pepper)
+impulse = img.copy()
+prob = 0.1
+rnd = np.random.rand(*img.shape)
+impulse[rnd < prob/2] = 0
+impulse[rnd > 1 - prob/2] = 255
+noises["Impulse"] = impulse
+
+# 3. Poisson
+poisson = np.random.poisson(img.astype(np.float32))
+poisson = np.clip(poisson, 0, 255).astype(np.uint8)
+noises["Poisson"] = poisson
+
+# 4. Exponential
+exp_noise = np.random.exponential(30, img.shape)  # λ=1/30
+exponential = img.astype(np.float32) + exp_noise
+exponential = np.clip(exponential, 0, 255).astype(np.uint8)
+noises["Exponential"] = exponential
+
+# 5. Gamma
+gamma_noise = np.random.gamma(2.0, 30.0, img.shape)
+gamma = img.astype(np.float32) + gamma_noise
+gamma = np.clip(gamma, 0, 255).astype(np.uint8)
+noises["Gamma"] = gamma
+
+# 6. Rayleigh
+rayleigh_noise = np.random.rayleigh(30.0, img.shape)
+rayleigh = img.astype(np.float32) + rayleigh_noise
+rayleigh = np.clip(rayleigh, 0, 255).astype(np.uint8)
+noises["Rayleigh"] = rayleigh
+
+# 7. Uniform
+uniform_noise = np.random.uniform(-80, 80, img.shape)
+uniform = img.astype(np.float32) + uniform_noise
+uniform = np.clip(uniform, 0, 255).astype(np.uint8)
+noises["Uniform"] = uniform
+
+# 8. White noise
+white = img + np.random.normal(0, 40, img.shape)
+white = np.clip(white, 0, 255).astype(np.uint8)
+noises["White"] = white
+
+# 9. Colored noise (Pink noise: 1/f spectrum)
+def add_colored_noise(image, noise_type="pink", var=50):
+    rows, cols = image.shape
+    white = np.random.normal(0, np.sqrt(var), (rows, cols))
+
+    if noise_type == "blue":
+        # High-pass = white - blurred white
+        blurred = cv2.GaussianBlur(white, (5, 5), 0)
+        colored = white - blurred
+
+    elif noise_type == "brown":
+        # Brownian = cumulative sum of white noise
+        colored = np.cumsum(np.cumsum(white, axis=0), axis=1)
+        colored = (colored - colored.min()) / (colored.max() - colored.min()) * 255
+        return np.clip(image + colored, 0, 255).astype(np.uint8), colored
+
+    else:
+        # Low-pass filter white noise
+        colored = cv2.GaussianBlur(white, (5, 5), 0)
+
+    colored = (colored - colored.min()) / (colored.max() - colored.min()) * 255
+
+    return colored
+
+colored = img + add_colored_noise(img)
+noises["Colored"] = np.clip(colored, 0, 255).astype(np.uint8)
+
+# 10. Additive
+additive = img + np.random.normal(0, 70, img.shape)
+additive = np.clip(additive, 0, 255).astype(np.uint8)
+noises["Additive"] = additive
+
+# 11. Multiplicative
+multiplicative = img.astype(np.float32) * np.random.normal(1.0, 0.5, img.shape)
+multiplicative = np.clip(multiplicative, 0, 255).astype(np.uint8)
+noises["Multiplicative"] = multiplicative
+
+# 12. Quantization
+levels = 8
+quantization = np.round(img / (255/(levels-1))) * (255/(levels-1))
+quantization = quantization.astype(np.uint8)
+noises["Quantization"] = quantization
+
+# 13. Photon noise
+vals = 40
+photon = np.random.poisson(img.astype(np.float32) / 255.0 * vals) / vals * 255
+photon = np.clip(photon, 0, 255).astype(np.uint8)
+noises["Photon"] = photon
+
+cv2.imwrite("Original.png", img)
+for name, noisy in noises.items():
+    cv2.imwrite(f"{name}.png", noisy)
+
+titles = ["Original"] + list(noises.keys())
+images = [img] + list(noises.values())
+
+plt.figure(figsize=(14, 12))
+for i in range(len(images)):
+    plt.subplot(4, 4, i+1)
+    plt.imshow(images[i], cmap="gray")
+    plt.title(titles[i], fontsize=8)
+    plt.axis("off")
+plt.suptitle("Noise Models")
+plt.tight_layout()
+plt.show()
+
+# histograms
+plt.figure(figsize=(10, 50))
+for i, (im, title) in enumerate(zip(images, titles)):
+    plt.subplot(len(images), 2, 2*i+1)
+    plt.imshow(im, cmap="gray")
+    plt.title(title)
+    plt.axis("off")
+
+    plt.subplot(len(images), 2, 2*i+2)
+    flat = im.flatten()
+    plt.hist(flat, bins=64, color="gray", alpha=0.7, density=True)
+    mean_val = np.mean(flat)
+    std_val = np.std(flat)
+    plt.axvline(mean_val, color="r", linestyle="--", linewidth=1, label=f"Mean={mean_val:.1f}")
+    plt.axvline(mean_val+std_val, color="b", linestyle="--", linewidth=1)
+    plt.axvline(mean_val-std_val, color="b", linestyle="--", linewidth=1)
+    plt.title(f"{title} Histogram")
+    plt.xlabel("Pixel Intensity")
+    plt.ylabel("Probability Density")
+
+plt.tight_layout()
+plt.show()
+
+
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+
+def add_gaussian_noise(image, mean=0, var=20):
+    sigma = np.sqrt(var)
+    noise = np.random.normal(mean, sigma, image.shape)
+    noisy = image + noise
+    return np.clip(noisy, 0, 255).astype(np.uint8), noise
+
+def add_impulse_noise(image, prob=0.02):
+    noisy = image.copy()
+    noise = np.zeros_like(image, dtype=np.float32)
+    rnd = np.random.rand(*image.shape[:2])
+    noisy[rnd < prob/2] = 0
+    noisy[rnd > 1 - prob/2] = 255
+    noise[(rnd < prob/2) | (rnd > 1 - prob/2)] = 255
+    return noisy, noise
+
+def add_poisson_noise(image):
+    vals = len(np.unique(image))
+    vals = 2 ** np.ceil(np.log2(vals))
+    noisy = np.random.poisson(image * vals) / float(vals)
+    noise = noisy - image
+    return np.clip(noisy, 0, 255).astype(np.uint8), noise
+
+def add_exponential_noise(image, scale=30.0):
+    noise = np.random.exponential(scale, image.shape)
+    noisy = image + noise
+    return np.clip(noisy, 0, 255).astype(np.uint8), noise
+
+def add_gamma_noise(image, shape=2.0, scale=20.0):
+    noise = np.random.gamma(shape, scale, image.shape)
+    noisy = image + noise
+    return np.clip(noisy, 0, 255).astype(np.uint8), noise
+
+def add_rayleigh_noise(image, scale=30):
+    noise = np.random.rayleigh(scale, image.shape)
+    noisy = image + noise
+    return np.clip(noisy, 0, 255).astype(np.uint8), noise
+
+def add_uniform_noise(image, low=-50, high=50):
+    noise = np.random.uniform(low, high, image.shape)
+    noisy = image + noise
+    return np.clip(noisy, 0, 255).astype(np.uint8), noise
+
+def add_white_noise(image, var=50):
+    sigma = np.sqrt(var)
+    noise = np.random.normal(0, sigma, image.shape)
+    noisy = image + noise
+    return np.clip(noisy, 0, 255).astype(np.uint8), noise
+
+def add_colored_noise(image, noise_type="pink", var=50):
+    rows, cols = image.shape
+    white = np.random.normal(0, np.sqrt(var), (rows, cols))
+
+    if noise_type == "blue":
+        # High-pass = white - blurred white
+        blurred = cv2.GaussianBlur(white, (5, 5), 0)
+        colored = white - blurred
+
+    elif noise_type == "brown":
+        # Brownian = cumulative sum of white noise
+        colored = np.cumsum(np.cumsum(white, axis=0), axis=1)
+        colored = (colored - colored.min()) / (colored.max() - colored.min()) * 255
+        return np.clip(image + colored, 0, 255).astype(np.uint8), colored
+
+    else:
+        # Low-pass filter white noise
+        colored = cv2.GaussianBlur(white, (5, 5), 0)
+
+    colored = (colored - colored.min()) / (colored.max() - colored.min()) * 255
+    noisy = image + colored
+    return np.clip(noisy, 0, 255).astype(np.uint8), colored
+
+def add_additive_noise(image, var=30):
+    noise = np.random.normal(0, np.sqrt(var), image.shape)
+    noisy = image + noise
+    return np.clip(noisy, 0, 255).astype(np.uint8), noise
+
+def add_multiplicative_noise(image, mean=1.0, var=0.2):
+    noise = np.random.normal(mean, np.sqrt(var), image.shape)
+    noisy = image * noise
+    return np.clip(noisy, 0, 255).astype(np.uint8), noisy - image
+
+def add_quantization_noise(image, bits=4):
+    levels = 2 ** bits
+    quantized = np.floor(image / (256 / levels)) * (256 / levels)
+    noise = quantized - image
+    return quantized.astype(np.uint8), noise
+
+def add_photon_noise(image):
+    image_normalized = image / 255.0
+    noisy = np.random.poisson(image_normalized * 255) / 255.0
+    noisy = noisy * 255
+    noise = noisy - image
+    return np.clip(noisy, 0, 255).astype(np.uint8), noise
+
+def save_histogram(noise, name):
+    plt.figure()
+    plt.hist(noise.ravel(), bins=256, range=(-128, 128), color="gray")
+    plt.title(f"Histogram of {name} Noise")
+    plt.xlabel("Pixel Intensity")
+    plt.ylabel("Frequency")
+    plt.savefig(f"hist_{name}.png")
+    plt.close()
+
+img = cv2.imread("tree.jpg", cv2.IMREAD_GRAYSCALE)
+
+noise_functions = {
+    "Gaussian": add_gaussian_noise,
+    "Impulse": add_impulse_noise,
+    "Poisson": add_poisson_noise,
+    "Exponential": add_exponential_noise,
+    "Gamma": add_gamma_noise,
+    "Rayleigh": add_rayleigh_noise,
+    "Uniform": add_uniform_noise,
+    "White": add_white_noise,
+    "Colored": add_colored_noise,
+    "Additive": add_additive_noise,
+    "Multiplicative": add_multiplicative_noise,
+    "Quantization": add_quantization_noise,
+    "Photon": add_photon_noise
+}
+
+cv2.imwrite("Original.png", img)
+
+noises = {}
+for name, func in noise_functions.items():
+    if name == "Colored":
+        for ctype in ["pink", "blue", "brown"]:
+            noisy, noise = func(img, noise_type=ctype)
+            cname = f"{name}_{ctype.capitalize()}"
+            noises[cname] = noisy
+            save_histogram(noise, cname)
+    else:
+        noisy, noise = func(img)
+        noises[name] = noisy
+        save_histogram(noise, name)
+
+for name, noisy in noises.items():
+    cv2.imwrite(f"{name}.png", noisy)
+
+titles = ["Original"] + list(noises.keys())
+images = [img] + list(noises.values())
+
+plt.figure(figsize=(14, 12))
+for i in range(len(images)):
+    plt.subplot(4, 4, i+1)
+    plt.imshow(images[i], cmap="gray")
+    plt.title(titles[i], fontsize=8)
+    plt.axis("off")
+plt.suptitle("Noise Models (Strong Intensity)", fontsize=14)
+plt.tight_layout()
+plt.show()
+
+plt.figure(figsize=(10, 50))
+for i, (im, title) in enumerate(zip(images, titles)):
+    plt.subplot(len(images), 2, 2*i+1)
+    plt.imshow(im, cmap="gray")
+    plt.title(title)
+    plt.axis("off")
+
+    plt.subplot(len(images), 2, 2*i+2)
+    flat = im.flatten()
+    plt.hist(flat, bins=64, color="gray", alpha=0.7, density=True)
+    mean_val = np.mean(flat)
+    std_val = np.std(flat)
+    plt.axvline(mean_val, color="r", linestyle="--", linewidth=1, label=f"Mean={mean_val:.1f}")
+    plt.axvline(mean_val+std_val, color="b", linestyle="--", linewidth=1)
+    plt.axvline(mean_val-std_val, color="b", linestyle="--", linewidth=1)
+    plt.title(f"{title} Histogram")
+    plt.xlabel("Pixel Intensity")
+    plt.ylabel("Probability Density")
+
+plt.tight_layout()
+plt.show()
+
+
+
+
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.ndimage import maximum_filter, minimum_filter
+
+# -----------------------------
+# Filters
+# -----------------------------
+def mean_filter(img, ksize=3):
+    result = np.zeros_like(img, dtype=np.float32)
+    pad = ksize // 2
+    padded = cv2.copyMakeBorder(img, pad, pad, pad, pad, cv2.BORDER_REFLECT)
+
+    for i in range(img.shape[0]):
+        for j in range(img.shape[1]):
+            region = padded[i:i + ksize, j:j + ksize]
+            result[i, j] = np.mean(region)
+    return np.clip(result, 0, 255).astype(np.uint8)
+
+def median_filter(img, ksize=3):
+    result = np.zeros_like(img, dtype=np.float32)
+    pad = ksize // 2
+    padded = cv2.copyMakeBorder(img, pad, pad, pad, pad, cv2.BORDER_REFLECT)
+
+    for i in range(img.shape[0]):
+        for j in range(img.shape[1]):
+            region = padded[i:i + ksize, j:j + ksize]
+            result[i, j] = np.median(region)
+    return np.clip(result, 0, 255).astype(np.uint8)
+
+def harmonic_filter(img, ksize=3):
+    epsilon = 1e-6
+    result = np.zeros_like(img, dtype=np.float32)
+    pad = ksize // 2
+    padded = cv2.copyMakeBorder(img, pad, pad, pad, pad, cv2.BORDER_REFLECT)
+
+    for i in range(img.shape[0]):
+        for j in range(img.shape[1]):
+            region = padded[i:i + ksize, j:j + ksize]
+            result[i, j] = (ksize * ksize) / np.sum(1.0 / (region + epsilon))
+    return np.clip(result, 0, 255).astype(np.uint8)
+
+def geometric_filter(img, ksize=3):
+    result = np.zeros_like(img, dtype=np.float32)
+    pad = ksize // 2
+    padded = cv2.copyMakeBorder(img, pad, pad, pad, pad, cv2.BORDER_REFLECT)
+    
+    for i in range(img.shape[0]):
+        for j in range(img.shape[1]):
+            region = padded[i:i + ksize, j:j + ksize].astype(np.float32)
+            result[i, j] = np.exp(np.mean(np.log(region + 1e-6)))
+    return np.clip(result, 0, 255).astype(np.uint8)
+
+def contraharmonic_filter(img, ksize=3, Q=1.5):
+    result = np.zeros_like(img, dtype=np.float32)
+    pad = ksize // 2
+    padded = cv2.copyMakeBorder(img, pad, pad, pad, pad, cv2.BORDER_REFLECT)
+
+    for i in range(img.shape[0]):
+        for j in range(img.shape[1]):
+            region = padded[i:i + ksize, j:j + ksize].astype(np.float32)
+            numerator = np.sum(region ** (Q + 1))
+            denominator = np.sum(region ** Q + 1e-6)
+            result[i, j] = numerator / denominator
+    return np.clip(result, 0, 255).astype(np.uint8)
+
+def gaussian_filter(img, ksize=3, sigma=1.0):
+    return cv2.GaussianBlur(img, (ksize, ksize), sigma)
+
+def averaging_filter(img, ksize=3):
+    return cv2.blur(img, (ksize, ksize))
+
+def midpoint_filter(img, ksize=3):
+    maxf = maximum_filter(img, (ksize, ksize))
+    minf = minimum_filter(img, (ksize, ksize))
+    midpoint = (maxf + minf) / 2
+    return np.clip(midpoint, 0, 255).astype(np.uint8)
+
+# -----------------------------
+# Main
+# -----------------------------
+img = cv2.imread("tree.jpg", cv2.IMREAD_GRAYSCALE)
+
+noisy_titles = ["Gaussian", "Impulse", "Poisson", "Exponential", "Gamma", "Rayleigh", "Uniform",
+                "White", "Colored", "Additive", "Multiplicative", "Quantization", "Photon"]
+
+noisy_images = [cv2.imread(f"{title}.png", cv2.IMREAD_GRAYSCALE) for title in noisy_titles]
+
+filters = {
+    "Mean": mean_filter,
+    "Median": median_filter,
+    "Harmonic": harmonic_filter,
+    "Geometric": geometric_filter,
+    "Contraharmonic": contraharmonic_filter,
+    "Gaussian": gaussian_filter,
+    "Averaging": averaging_filter,
+    "Midpoint": midpoint_filter
+}
+
+for idx, title in enumerate(noisy_titles):
+    noisy_img = noisy_images[idx]
+    
+    plt.figure(figsize=(16, 6))
+    
+    for i, (fname, ffunc) in enumerate(filters.items()):
+        filtered_img = ffunc(noisy_img)
+        
+        plt.subplot(2, 4, i+1)
+        plt.imshow(filtered_img, cmap="gray")
+        plt.title(f"{fname} Filter")
+        plt.axis("off")
+    
+    plt.suptitle(f"Filters applied to {title} Noise", fontsize=14)
+    plt.tight_layout()
+    plt.show()
+
+
+import cv2
+import numpy as np
+from scipy.ndimage import maximum_filter, minimum_filter
+from scipy.stats import skew, kurtosis
+
+def mean_filter(img, ksize=3):
+    return cv2.blur(img, (ksize, ksize))
+
+def median_filter(img, ksize=3):
+    return cv2.medianBlur(img, ksize)
+
+def harmonic_filter(img, ksize=3):
+    epsilon = 1e-6
+    padded = cv2.copyMakeBorder(img.astype(np.float32), ksize//2, ksize//2, ksize//2, ksize//2, cv2.BORDER_REFLECT)
+    result = np.zeros_like(img, dtype=np.float32)
+    for i in range(img.shape[0]):
+        for j in range(img.shape[1]):
+            region = padded[i:i+ksize, j:j+ksize]
+            result[i,j] = (ksize*ksize) / (np.sum(1.0/(region+epsilon)))
+    return np.clip(result, 0, 255).astype(np.uint8)
+
+def geometric_filter(img, ksize=3):
+    epsilon = 1e-6
+    padded = cv2.copyMakeBorder(img.astype(np.float32), ksize//2, ksize//2, ksize//2, ksize//2, cv2.BORDER_REFLECT)
+    result = np.zeros_like(img, dtype=np.float32)
+    for i in range(img.shape[0]):
+        for j in range(img.shape[1]):
+            region = padded[i:i+ksize, j:j+ksize]
+            result[i,j] = np.exp(np.mean(np.log(region+epsilon)))
+    return np.clip(result, 0, 255).astype(np.uint8)
+
+def contraharmonic_filter(img, ksize=3, Q=1.5):
+    epsilon = 1e-6
+    padded = cv2.copyMakeBorder(img.astype(np.float32), ksize//2, ksize//2, ksize//2, ksize//2, cv2.BORDER_REFLECT)
+    result = np.zeros_like(img, dtype=np.float32)
+    for i in range(img.shape[0]):
+        for j in range(img.shape[1]):
+            region = padded[i:i+ksize, j:j+ksize]
+            numerator = np.sum(region**(Q+1))
+            denominator = np.sum(region**Q + epsilon)
+            result[i,j] = numerator / denominator
+    return np.clip(result, 0, 255).astype(np.uint8)
+
+def gaussian_filter(img, ksize=3, sigma=1.0):
+    return cv2.GaussianBlur(img, (ksize, ksize), sigma)
+
+def averaging_filter(img, ksize=3):
+    return cv2.blur(img, (ksize, ksize))
+
+def midpoint_filter(img, ksize=3):
+    maxf = maximum_filter(img, (ksize, ksize))
+    minf = minimum_filter(img, (ksize, ksize))
+    midpoint = (maxf + minf)/2
+    return np.clip(midpoint, 0, 255).astype(np.uint8)
+
+def identify_noise(img_noisy, img_original):
+    noise = img_noisy.astype(np.float32) - img_original.astype(np.float32)
+    mean_val = np.mean(noise)
+    std_val = np.std(noise)
+    skew_val = skew(noise.flatten())
+    kurt_val = kurtosis(noise.flatten())
+    
+    # Extreme values → Impulse
+    if np.max(noise) > 200 or np.min(noise) < -200:
+        return "Impulse"
+    
+    # Uniform noise: roughly flat distribution
+    hist, _ = np.histogram(noise.flatten(), bins=50)
+    flatness = np.std(hist)
+    if flatness < 20:
+        return "Uniform"
+    
+    # Multiplicative noise (high std relative to mean)
+    if std_val/np.mean(np.abs(img_original)+1e-6) > 0.5:
+        return "Multiplicative"
+    
+    # Skewed positive → Exponential/Gamma
+    if skew_val > 1:
+        if mean_val > 20:
+            return "Gamma"
+        else:
+            return "Exponential"
+    
+    # Low-frequency correlated → Colored
+    if std_val > 40 and np.abs(skew_val) < 0.5:
+        return "Colored"
+    
+    # Poisson/Photon → variance ≈ mean
+    if np.abs(np.var(noise) - np.mean(img_original)) < 10:
+        return "Poisson"
+    
+    # Additive/White/Gaussian → zero-mean, symmetric
+    if abs(mean_val) < 5 and skew_val < 0.5:
+        return "Gaussian"
+    
+    # Quantization → discrete steps
+    diffs = np.diff(np.unique(img_noisy))
+    if np.any(diffs > 1) and np.all(diffs % 16 == 0):
+        return "Quantization"
+    
+    return "Additive"  # fallback
+
+def best_filter_for_noise(noise_type):
+    mapping = {
+        "Gaussian": gaussian_filter,
+        "Impulse": median_filter,
+        "Poisson": harmonic_filter,
+        "Exponential": harmonic_filter,
+        "Gamma": harmonic_filter,
+        "Rayleigh": mean_filter,
+        "Uniform": averaging_filter,
+        "White": gaussian_filter,
+        "Colored": midpoint_filter,
+        "Additive": mean_filter,
+        "Multiplicative": geometric_filter,
+        "Quantization": midpoint_filter,
+        "Photon": harmonic_filter
+    }
+    return mapping.get(noise_type, mean_filter)
+
+def denoise_image(img_noisy, img_original):
+    noise_type = identify_noise(img_noisy, img_original)
+    print(f"Identified noise: {noise_type}")
+    filter_func = best_filter_for_noise(noise_type)
+    denoised = filter_func(img_noisy)
+    return denoised, noise_type
+
+if __name__ == "__main__":
+    img_original = cv2.imread("Original.png", cv2.IMREAD_GRAYSCALE)
+    img_noisy = cv2.imread("Gaussian.png", cv2.IMREAD_GRAYSCALE)  # change to any noisy image
+    
+    denoised, noise_type = denoise_image(img_noisy, img_original)
+    
+    cv2.imwrite(f"denoised_{noise_type}.png", denoised)
+
+    import matplotlib.pyplot as plt
+    plt.figure(figsize=(12,5))
+    plt.subplot(1,3,1)
+    plt.imshow(img_original, cmap="gray")
+    plt.title("Original")
+    plt.axis("off")
+    
+    plt.subplot(1,3,2)
+    plt.imshow(img_noisy, cmap="gray")
+    plt.title(f"Noisy ({noise_type})")
+    plt.axis("off")
+    
+    plt.subplot(1,3,3)
+    plt.imshow(denoised, cmap="gray")
+    plt.title("Denoised")
+    plt.axis("off")
+    
+    plt.tight_layout()
+    plt.show()
